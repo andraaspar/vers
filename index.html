@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hungarian Vowel Counter & Hexameter Scanner</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: monospace;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    display: flex;
+    justify-content: center;
+    padding: 2rem;
+    min-height: 100vh;
+  }
+  .container { width: 100%; max-width: 900px; }
+  h1 { text-align: center; margin-bottom: 1.5rem; color: #e94560; font-size: 1.4rem; }
+  .wrapper {
+    position: relative;
+    border: 2px solid #e94560;
+    border-radius: 8px;
+    background: #16213e;
+  }
+  #backdrop {
+    padding: 12px;
+    padding-right: 60px;
+    pointer-events: none;
+    user-select: none;
+    font-size: 16px;
+  }
+  .slot {
+    height: 44.8px;
+    font-size: 16px;
+    white-space: pre;
+    overflow: hidden;
+    position: relative;
+  }
+  .slot .sl-text {
+    line-height: 44.8px;
+    color: #e0e0e0;
+  }
+  .slot .sl-scan {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    line-height: 16px;
+    font-size: 16px;
+    color: #4ec5c1;
+  }
+  #countcol {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    pointer-events: none;
+    user-select: none;
+  }
+  #countcol .c-slot {
+    height: 44.8px;
+    line-height: 44.8px;
+    font-size: 14px;
+    color: #e94560;
+    text-align: right;
+  }
+  textarea {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    padding: 12px;
+    padding-right: 60px;
+    font-family: monospace;
+    font-size: 16px;
+    line-height: 44.8px;
+    background: transparent;
+    color: transparent;
+    caret-color: #e94560;
+    border: none;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    z-index: 2;
+    white-space: pre;
+  }
+  .hint { text-align: center; margin-top: 1rem; font-size: 0.85rem; color: #666; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Hungarian Vowel Counter & Hexameter Scanner</h1>
+  <div class="wrapper">
+    <div id="backdrop"></div>
+    <div id="countcol"></div>
+    <textarea id="input" spellcheck="false" placeholder="Type or paste text here…"></textarea>
+  </div>
+  <p class="hint">Vowels: a á e é i í o ó ö ő u ú ü ű | – long, U short | [ ] lines skipped</p>
+</div>
+<script>
+(function () {
+  var VOWELS_ALL = 'aáeéiíoóöőuúüűAÁEÉIÍOÓÖŐUÚÜŰ';
+  var LONG_VOWELS = 'áéíóőúűÁÉÍÓŐÚŰ';
+  var input = document.getElementById('input');
+  var backdrop = document.getElementById('backdrop');
+  var countcol = document.getElementById('countcol');
+
+  function countVowels(str) {
+    var n = 0;
+    for (var i = 0; i < str.length; i++) {
+      if (VOWELS_ALL.indexOf(str[i]) !== -1) n++;
+    }
+    return n;
+  }
+
+  function isBracketed(line) {
+    var t = line.trim();
+    return t.length >= 2 && t[0] === '[' && t[t.length - 1] === ']';
+  }
+
+  function isVowel(ch) { return VOWELS_ALL.indexOf(ch) !== -1; }
+  function isLongVowel(ch) { return LONG_VOWELS.indexOf(ch) !== -1; }
+
+  function scanLine(line) {
+    var result = [];
+    for (var i = 0; i < line.length; i++) {
+      result.push(' ');
+    }
+    for (var i = 0; i < line.length; i++) {
+      if (!isVowel(line[i])) continue;
+      var mark;
+      if (isLongVowel(line[i])) {
+        mark = '\u2013';
+      } else {
+        var nxt = -1;
+        for (var j = i + 1; j < line.length; j++) {
+          if (isVowel(line[j])) { nxt = j; break; }
+        }
+        var boundary = (nxt !== -1) ? nxt : line.length;
+        var cons = 0;
+        for (var j = i + 1; j < boundary; j++) {
+          if (/[a-záéíóőúűöüA-ZÁÉÍÓŐÚŰÖÜ]/i.test(line[j]) && !isVowel(line[j])) cons++;
+        }
+        mark = cons >= 2 ? '\u2013' : 'U';
+      }
+      result[i] = mark;
+    }
+    return result.join('');
+  }
+
+  function esc(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function update() {
+    var lines = input.value.split('\n');
+    var bh = '', ch = '';
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var bracketed = isBracketed(line);
+      bh += '<div class="slot">';
+      bh += '<div class="sl-text">' + esc(line || '\u00a0') + '</div>';
+      if (!bracketed) {
+        bh += '<div class="sl-scan">' + esc(scanLine(line)) + '</div>';
+      }
+      bh += '</div>';
+      var c = bracketed ? 0 : countVowels(line);
+      ch += '<div class="c-slot">' + (c > 0 ? c : '') + '</div>';
+    }
+    backdrop.innerHTML = bh;
+    countcol.innerHTML = ch;
+    input.style.height = backdrop.offsetHeight + 'px';
+  }
+
+  input.addEventListener('input', update);
+  update();
+})();
+</script>
+</body>
+</html>
