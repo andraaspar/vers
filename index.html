@@ -100,6 +100,10 @@
 (function () {
   var VOWELS_ALL = 'aáeéiíoóöőuúüűAÁEÉIÍOÓÖŐUÚÜŰ';
   var LONG_VOWELS = 'áéíóőúűÁÉÍÓŐÚŰ';
+
+  // Hungarian multi-letter consonants, longest first for greedy matching
+  var MULTI_CONSONANTS = ['dzs', 'cs', 'dz', 'gy', 'ly', 'ny', 'sz', 'ty', 'zs'];
+
   var input = document.getElementById('input');
   var backdrop = document.getElementById('backdrop');
   var countcol = document.getElementById('countcol');
@@ -119,30 +123,59 @@
 
   function isVowel(ch) { return VOWELS_ALL.indexOf(ch) !== -1; }
   function isLongVowel(ch) { return LONG_VOWELS.indexOf(ch) !== -1; }
+  function isLetter(ch) { return /[a-záéíóőúűöüA-ZÁÉÍÓŐÚŰÖÜ]/i.test(ch); }
+
+  // Count logical consonants between two positions in the string
+  function countConsonants(line, from, to) {
+    var count = 0;
+    var i = from;
+    while (i < to) {
+      var ch = line[i];
+      if (!isLetter(ch) || isVowel(ch)) {
+        i++;
+        continue;
+      }
+      // Try to match a multi-letter consonant (longest first)
+      var matched = false;
+      var lower = line.toLowerCase();
+      for (var m = 0; m < MULTI_CONSONANTS.length; m++) {
+        var mc = MULTI_CONSONANTS[m];
+        if (i + mc.length <= to && lower.substring(i, i + mc.length) === mc) {
+          count++;
+          i += mc.length;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        count++;
+        i++;
+      }
+    }
+    return count;
+  }
 
   function scanLine(line) {
     var result = [];
     for (var i = 0; i < line.length; i++) {
       result.push(' ');
     }
+    // Find vowel positions
+    var vp = [];
     for (var i = 0; i < line.length; i++) {
-      if (!isVowel(line[i])) continue;
+      if (isVowel(line[i])) vp.push(i);
+    }
+    for (var s = 0; s < vp.length; s++) {
+      var pos = vp[s];
       var mark;
-      if (isLongVowel(line[i])) {
+      if (isLongVowel(line[pos])) {
         mark = '\u2013';
       } else {
-        var nxt = -1;
-        for (var j = i + 1; j < line.length; j++) {
-          if (isVowel(line[j])) { nxt = j; break; }
-        }
-        var boundary = (nxt !== -1) ? nxt : line.length;
-        var cons = 0;
-        for (var j = i + 1; j < boundary; j++) {
-          if (/[a-záéíóőúűöüA-ZÁÉÍÓŐÚŰÖÜ]/i.test(line[j]) && !isVowel(line[j])) cons++;
-        }
+        var nxt = (s + 1 < vp.length) ? vp[s + 1] : line.length;
+        var cons = countConsonants(line, pos + 1, nxt);
         mark = cons >= 2 ? '\u2013' : 'U';
       }
-      result[i] = mark;
+      result[pos] = mark;
     }
     return result.join('');
   }
