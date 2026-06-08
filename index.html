@@ -1,229 +1,676 @@
 <!DOCTYPE html>
 <html lang="hu">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hungarian Vowel Counter & Hexameter Scanner</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: monospace;
-    background: #1a1a2e;
-    color: #e0e0e0;
-    display: flex;
-    justify-content: center;
-    padding: 2rem;
-    min-height: 100vh;
-  }
-  .container { width: 100%; max-width: 900px; }
-  h1 { text-align: center; margin-bottom: 1.5rem; color: #e94560; font-size: 1.4rem; }
-  .wrapper {
-    position: relative;
-    border: 2px solid #e94560;
-    border-radius: 8px;
-    background: #16213e;
-  }
-  #backdrop {
-    padding: 12px;
-    padding-right: 60px;
-    pointer-events: none;
-    user-select: none;
-    font-size: 16px;
-  }
-  .slot {
-    height: 44.8px;
-    font-size: 16px;
-    white-space: pre;
-    overflow: hidden;
-    position: relative;
-  }
-  .slot .sl-text {
-    line-height: 44.8px;
-    color: #e0e0e0;
-  }
-  .slot .sl-scan {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    line-height: 16px;
-    font-size: 16px;
-    color: #4ec5c1;
-  }
-  #countcol {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 40px;
-    pointer-events: none;
-    user-select: none;
-  }
-  #countcol .c-slot {
-    height: 44.8px;
-    line-height: 44.8px;
-    font-size: 14px;
-    color: #e94560;
-    text-align: right;
-  }
-  textarea {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    padding: 12px;
-    padding-right: 60px;
-    font-family: monospace;
-    font-size: 16px;
-    line-height: 44.8px;
-    background: transparent;
-    color: transparent;
-    caret-color: #e94560;
-    border: none;
-    outline: none;
-    resize: none;
-    overflow: hidden;
-    z-index: 2;
-    white-space: pre;
-  }
-  .hint { text-align: center; margin-top: 1rem; font-size: 0.85rem; color: #666; }
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Magyar magánhangzó-számláló és hexameter-segéd</title>
+		<style>
+			:root {
+				--bg: #1a1a1a;
+				--panel: #232323;
+				--fg: #f0f0f0;
+				--muted: #888;
+				--count: #ff5252;
+				--scansion: #4dd0e1;
+				--mono: 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace;
+			}
 
-  @media (max-width: 768px) {
-    body {
-      padding: 0;
-    }
+			* {
+				box-sizing: border-box;
+			}
 
-    #backdrop,
-    textarea {
-      padding-left: 0;
-      padding-right: 48px;
-    }
+			html,
+			body {
+				background: var(--bg);
+				color: var(--fg);
+				margin: 0;
+				padding: 0;
+			}
 
-    #countcol {
-      right: 8px;
-      width: 32px;
-    }
-  }
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>Hungarian Vowel Counter & Hexameter Scanner</h1>
-  <div class="wrapper">
-    <div id="backdrop"></div>
-    <div id="countcol"></div>
-    <textarea id="input" spellcheck="false" placeholder="Type or paste text here…"></textarea>
-  </div>
-  <p class="hint">Vowels: a á e é i í o ó ö ő u ú ü ű | – long, U short | [ ] lines skipped</p>
-</div>
-<script>
-(function () {
-  var VOWELS_ALL = 'aáeéiíoóöőuúüűAÁEÉIÍOÓÖŐUÚÜŰ';
-  var LONG_VOWELS = 'áéíóőúűÁÉÍÓŐÚŰ';
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+				padding: 24px 32px 64px;
+				min-height: 100vh;
+			}
 
-  // Hungarian multi-letter consonants, longest first for greedy matching
-  var MULTI_CONSONANTS = ['dzs', 'cs', 'dz', 'gy', 'ly', 'ny', 'sz', 'ty', 'zs'];
+			.container {
+				max-width: 900px;
+				margin: 0 auto;
+			}
 
-  var input = document.getElementById('input');
-  var backdrop = document.getElementById('backdrop');
-  var countcol = document.getElementById('countcol');
+			h1 {
+				font-size: 1.4em;
+				font-weight: 500;
+				text-align: center;
+				margin: 0 0 24px;
+				color: #ddd;
+			}
 
-  function countVowels(str) {
-    var n = 0;
-    for (var i = 0; i < str.length; i++) {
-      if (VOWELS_ALL.indexOf(str[i]) !== -1) n++;
-    }
-    return n;
-  }
+			/* Wrapper holds the editor and the absolutely-positioned counts column */
+			.editor-wrap {
+				position: relative;
+				background: var(--panel);
+				border-radius: 8px;
+				padding: 14px 56px 14px 16px;
+				/* right padding reserves space for counts */
+			}
 
-  function isBracketed(line) {
-    var t = line.trim();
-    return t.length >= 2 && t[0] === '[' && t[t.length - 1] === ']';
-  }
+			/* The contenteditable surface itself.
+     Using a monospace font so the scansion (with nbsp tricks) wraps in step
+     with the text above it, character by character. */
+			.editor {
+				font-family: var(--mono);
+				font-size: 18px;
+				line-height: 1.4;
+				white-space: pre-wrap;
+				overflow-wrap: break-word;
+				word-break: normal;
+				outline: none;
+				color: var(--fg);
+				caret-color: var(--fg);
+				min-height: 1.4em;
+				tab-size: 4;
+			}
 
-  function isVowel(ch) { return VOWELS_ALL.indexOf(ch) !== -1; }
-  function isLongVowel(ch) { return LONG_VOWELS.indexOf(ch) !== -1; }
-  function isLetter(ch) { return /[a-záéíóőúűöüA-ZÁÉÍÓŐÚŰÖÜ]/i.test(ch); }
+			.line {
+				/* one logical line: text on top, scansion beneath, both in same monospace grid */
+			}
 
-  // Count logical consonants between two positions in the string
-  function countConsonants(line, from, to) {
-    var count = 0;
-    var i = from;
-    while (i < to) {
-      var ch = line[i];
-      if (!isLetter(ch) || isVowel(ch)) {
-        i++;
-        continue;
-      }
-      // Try to match a multi-letter consonant (longest first)
-      var matched = false;
-      var lower = line.toLowerCase();
-      for (var m = 0; m < MULTI_CONSONANTS.length; m++) {
-        var mc = MULTI_CONSONANTS[m];
-        if (i + mc.length <= to && lower.substring(i, i + mc.length) === mc) {
-          count++;
-          i += mc.length;
-          matched = true;
-          break;
-        }
-      }
-      if (!matched) {
-        count++;
-        i++;
-      }
-    }
-    return count;
-  }
+			.line>.text {
+				display: block;
+				white-space: pre-wrap;
+				overflow-wrap: break-word;
+				min-height: 1.4em;
+			}
 
-  function scanLine(line) {
-    var result = [];
-    for (var i = 0; i < line.length; i++) {
-      result.push(' ');
-    }
-    // Find vowel positions
-    var vp = [];
-    for (var i = 0; i < line.length; i++) {
-      if (isVowel(line[i])) vp.push(i);
-    }
-    for (var s = 0; s < vp.length; s++) {
-      var pos = vp[s];
-      var mark;
-      if (isLongVowel(line[pos])) {
-        mark = '\u2013';
-      } else {
-        var nxt = (s + 1 < vp.length) ? vp[s + 1] : line.length;
-        var cons = countConsonants(line, pos + 1, nxt);
-        mark = cons >= 2 ? '\u2013' : 'U';
-      }
-      result[pos] = mark;
-    }
-    return result.join('');
-  }
+			.line>.scansion {
+				display: block;
+				color: var(--scansion);
+				white-space: pre-wrap;
+				overflow-wrap: break-word;
+				/* Visually present but inert: not selectable, not clickable, not editable */
+				user-select: none;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				pointer-events: none;
+				min-height: 1.4em;
+				caret-color: transparent;
+			}
 
-  function esc(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
+			/* Counts column: absolute parent, absolute children — JS positions each
+     count to align with its line. */
+			.counts {
+				position: absolute;
+				top: 14px;
+				right: 0;
+				width: 48px;
+				height: 100%;
+				pointer-events: none;
+			}
 
-  function update() {
-    var lines = input.value.split('\n');
-    var bh = '', ch = '';
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      var bracketed = isBracketed(line);
-      bh += '<div class="slot">';
-      bh += '<div class="sl-text">' + esc(line || '\u00a0') + '</div>';
-      if (!bracketed) {
-        bh += '<div class="sl-scan">' + esc(scanLine(line)) + '</div>';
-      }
-      bh += '</div>';
-      var c = bracketed ? 0 : countVowels(line);
-      ch += '<div class="c-slot">' + (c > 0 ? c : '') + '</div>';
-    }
-    backdrop.innerHTML = bh;
-    countcol.innerHTML = ch;
-    input.style.height = backdrop.offsetHeight + 'px';
-  }
+			.count {
+				position: absolute;
+				right: 12px;
+				width: 36px;
+				text-align: right;
+				color: var(--count);
+				font-family: var(--mono);
+				font-size: 18px;
+				line-height: 1.4;
+				user-select: none;
+				-webkit-user-select: none;
+			}
 
-  input.addEventListener('input', update);
-  update();
-})();
-</script>
-</body>
+			.hint {
+				margin-top: 14px;
+				color: var(--muted);
+				font-size: 0.85em;
+				text-align: center;
+			}
+
+			.hint code {
+				font-family: var(--mono);
+				color: #aaa;
+			}
+
+			@media (max-width: 768px) {
+				body {
+					padding: 12px 0 48px;
+				}
+
+				.container {
+					padding: 0;
+				}
+
+				h1 {
+					font-size: 1.15em;
+					margin: 0 8px 12px;
+				}
+
+				.editor-wrap {
+					border-radius: 0;
+					padding: 10px 30px 10px 6px;
+				}
+
+				.counts {
+					width: 26px;
+					top: 10px;
+				}
+
+				.count {
+					width: 24px;
+					right: 2px;
+					font-size: 15px;
+				}
+
+				.editor {
+					font-size: 15px;
+				}
+
+				.hint {
+					padding: 0 8px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<h1>Magyar magánhangzó-számláló és hexameter-segéd</h1>
+
+			<div class="editor-wrap">
+				<div class="editor" id="editor" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+				<div class="counts" id="counts"></div>
+			</div>
+
+			<div class="hint">
+				Magánhangzók: a á e é i í o ó ö ő u ú ü ű &nbsp;|&nbsp; ‑ hosszú, U rövid &nbsp;|&nbsp; [ ] kihagyott sorok
+			</div>
+		</div>
+
+		<script>
+			(() => {
+				'use strict';
+
+				// ---------------- Constants ----------------
+
+				const VOWELS = new Set(['a', 'á', 'e', 'é', 'i', 'í', 'o', 'ó', 'ö', 'ő', 'u', 'ú', 'ü', 'ű']);
+				const LONG_VOWELS = new Set(['á', 'é', 'í', 'ó', 'ő', 'ú', 'ű']);
+				// Greedy longest-first
+				const DIGRAPHS = ['dzs', 'cs', 'dz', 'gy', 'ly', 'ny', 'sz', 'ty', 'zs'];
+				const NBSP = '\u00A0';
+				const LONG_MARK = '\u2011'; // non-breaking hyphen — won't create a line-break opportunity
+
+				// ---------------- Linguistic helpers ----------------
+
+				function isVowel(ch) {
+					return ch && VOWELS.has(ch.toLowerCase());
+				}
+
+				function isLongVowel(ch) {
+					return ch && LONG_VOWELS.has(ch.toLowerCase());
+				}
+
+				function isLetter(ch) {
+					if (!ch) return false;
+					// Unicode letter test
+					return /\p{L}/u.test(ch);
+				}
+
+				function isConsonantLetter(ch) {
+					return isLetter(ch) && !isVowel(ch);
+				}
+
+				function isBracketed(line) {
+					const t = line.trim();
+					return t.length >= 2 && t.startsWith('[') && t.endsWith(']');
+				}
+
+				function countVowels(line) {
+					let n = 0;
+					for (const ch of line) if (isVowel(ch)) n++;
+					return n;
+				}
+
+				// Count consonants in a substring, treating Hungarian digraphs/trigraphs as one.
+				// Non-letter characters (spaces, punctuation) are ignored.
+				function countConsonants(segment) {
+					const lower = segment.toLowerCase();
+					let i = 0;
+					let count = 0;
+					while (i < lower.length) {
+						const ch = lower[i];
+						if (!isConsonantLetter(ch)) { i++; continue; }
+						let matched = false;
+						for (const dg of DIGRAPHS) {
+							if (lower.substr(i, dg.length) === dg) {
+								count++;
+								i += dg.length;
+								matched = true;
+								break;
+							}
+						}
+						if (!matched) {
+							count++;
+							i++;
+						}
+					}
+					return count;
+				}
+
+				// Build the raw scansion string (same length as line). Each position is either
+				// ' ', '‑' (long), or 'U' (short).
+				function buildScansion(line) {
+					const out = new Array(line.length).fill(' ');
+					const vowelIndices = [];
+					for (let i = 0; i < line.length; i++) {
+						if (isVowel(line[i])) vowelIndices.push(i);
+					}
+					for (let v = 0; v < vowelIndices.length; v++) {
+						const idx = vowelIndices[v];
+						const ch = line[idx];
+						if (isLongVowel(ch)) {
+							out[idx] = LONG_MARK;
+						} else {
+							const endIdx = v + 1 < vowelIndices.length ? vowelIndices[v + 1] : line.length;
+							const segment = line.slice(idx + 1, endIdx);
+							const cc = countConsonants(segment);
+							out[idx] = cc >= 2 ? LONG_MARK : 'U';
+						}
+					}
+					return out.join('');
+				}
+
+				// Convert raw scansion into displayable form: any space at a position whose
+				// original character is a non-space (i.e. inside a word) becomes nbsp, so the
+				// scansion wraps at the same word boundaries as the text above it.
+				function formatScansionForDisplay(line, scansion) {
+					let out = '';
+					for (let i = 0; i < line.length; i++) {
+						const sc = scansion[i] || ' ';
+						const orig = line[i];
+						if (sc === ' ' && orig && orig !== ' ' && orig !== '\t') {
+							out += NBSP;
+						} else {
+							out += sc;
+						}
+					}
+					return out;
+				}
+
+				// ---------------- DOM rendering ----------------
+
+				const editor = document.getElementById('editor');
+				const countsEl = document.getElementById('counts');
+
+				function escapeHtml(s) {
+					return s
+						.replace(/&/g, '&amp;')
+						.replace(/</g, '&lt;')
+						.replace(/>/g, '&gt;');
+				}
+
+				function renderLineHtml(line) {
+					const bracketed = isBracketed(line);
+					const count = bracketed ? 0 : countVowels(line);
+					// Empty line still needs height — use <br>
+					const textHtml = line.length > 0 ? escapeHtml(line) : '<br>';
+
+					if (bracketed) {
+						return '<div class="line" data-count="0" data-bracketed="1">'
+							+ '<div class="text">' + textHtml + '</div>'
+							+ '</div>';
+					}
+
+					const rawScansion = buildScansion(line);
+					const displayScansion = formatScansionForDisplay(line, rawScansion);
+					// If line has no visible scansion characters at all, still keep the row's
+					// height with an nbsp.
+					const scansionHtml = displayScansion.length > 0
+						? escapeHtml(displayScansion)
+						: NBSP;
+
+					return '<div class="line" data-count="' + count + '">'
+						+ '<div class="text">' + textHtml + '</div>'
+						+ '<div class="scansion" contenteditable="false">' + scansionHtml + '</div>'
+						+ '</div>';
+				}
+
+				function render(lines) {
+					if (!lines || lines.length === 0) lines = [''];
+					let html = '';
+					for (const line of lines) html += renderLineHtml(line);
+					editor.innerHTML = html;
+				}
+
+				// ---------------- Reading lines back from the DOM ----------------
+
+				// The user types into `.line > .text` blocks; the browser only mutates those
+				// text nodes. We rebuild our model by reading textContent of each.
+				function readLines() {
+					const textEls = editor.querySelectorAll(':scope > .line > .text');
+					if (textEls.length === 0) return [''];
+					const lines = [];
+					for (const el of textEls) lines.push(el.textContent);
+					return lines;
+				}
+
+				// ---------------- Caret save / restore ----------------
+
+				// We address the caret as { lineIndex, offset } where offset is the character
+				// offset inside that line's `.text` element, ignoring scansion entirely.
+				function saveCaret() {
+					const sel = window.getSelection();
+					if (!sel || sel.rangeCount === 0) return null;
+					const range = sel.getRangeAt(0);
+					let node = range.startContainer;
+
+					// Walk up to find the .text ancestor (or the .line that holds it).
+					let textEl = null;
+					let n = node;
+					while (n && n !== editor) {
+						if (n.nodeType === 1 && n.classList) {
+							if (n.classList.contains('text')) { textEl = n; break; }
+							if (n.classList.contains('scansion')) {
+								// Caret should never legitimately land here, but if it does map to
+								// the sibling .text instead.
+								textEl = n.parentNode && n.parentNode.querySelector('.text');
+								break;
+							}
+							if (n.classList.contains('line')) {
+								textEl = n.querySelector('.text');
+								break;
+							}
+						}
+						n = n.parentNode;
+					}
+					if (!textEl) return null;
+
+					const lineEl = textEl.closest('.line');
+					const allLines = Array.from(editor.querySelectorAll(':scope > .line'));
+					const lineIndex = allLines.indexOf(lineEl);
+					if (lineIndex < 0) return null;
+
+					// Compute character offset within textEl by walking text nodes.
+					let offset = 0;
+					if (range.startContainer === textEl) {
+						// Offset is among element children — count text length of preceding ones.
+						for (let i = 0; i < range.startOffset; i++) {
+							const child = textEl.childNodes[i];
+							offset += child ? (child.textContent || '').length : 0;
+						}
+					} else {
+						const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT, null);
+						let tn;
+						while ((tn = walker.nextNode())) {
+							if (tn === range.startContainer) {
+								offset += range.startOffset;
+								break;
+							}
+							offset += tn.nodeValue.length;
+						}
+					}
+					return { lineIndex, offset };
+				}
+
+				function restoreCaret(saved) {
+					if (!saved) return;
+					const allLines = editor.querySelectorAll(':scope > .line');
+					if (saved.lineIndex < 0 || saved.lineIndex >= allLines.length) return;
+					const lineEl = allLines[saved.lineIndex];
+					const textEl = lineEl.querySelector('.text');
+					if (!textEl) return;
+
+					const sel = window.getSelection();
+					const range = document.createRange();
+
+					// Walk text nodes inside textEl looking for the position.
+					const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT, null);
+					let pos = 0;
+					let target = null;
+					let targetOffset = 0;
+					let tn;
+					while ((tn = walker.nextNode())) {
+						const len = tn.nodeValue.length;
+						if (pos + len >= saved.offset) {
+							target = tn;
+							targetOffset = saved.offset - pos;
+							break;
+						}
+						pos += len;
+					}
+
+					if (target) {
+						range.setStart(target, Math.max(0, Math.min(target.nodeValue.length, targetOffset)));
+					} else {
+						// Empty line (only contains a <br>) — place at start of the element.
+						range.setStart(textEl, 0);
+					}
+					range.collapse(true);
+					sel.removeAllRanges();
+					sel.addRange(range);
+				}
+
+				// ---------------- Counts column positioning ----------------
+
+				function positionCounts() {
+					const lines = editor.querySelectorAll(':scope > .line');
+					// Sync number of count nodes
+					while (countsEl.children.length < lines.length) {
+						const c = document.createElement('div');
+						c.className = 'count';
+						countsEl.appendChild(c);
+					}
+					while (countsEl.children.length > lines.length) {
+						countsEl.removeChild(countsEl.lastChild);
+					}
+
+					if (lines.length === 0) return;
+
+					const wrapRect = countsEl.getBoundingClientRect();
+
+					for (let i = 0; i < lines.length; i++) {
+						const line = lines[i];
+						const textEl = line.querySelector('.text');
+						const measureRect = (textEl || line).getBoundingClientRect();
+						const top = measureRect.top - wrapRect.top;
+						const countNode = countsEl.children[i];
+						const n = parseInt(line.dataset.count, 10) || 0;
+						countNode.textContent = n > 0 ? String(n) : '';
+						countNode.style.top = top + 'px';
+					}
+				}
+
+				// ---------------- Persistence ----------------
+
+				const STORAGE_KEY = 'vers.text';
+
+				function saveStored(lines) {
+					try {
+						localStorage.setItem(STORAGE_KEY, lines.join('\n'));
+					} catch (_) { /* quota / private mode — ignore */ }
+				}
+
+				function loadStored() {
+					try {
+						const raw = localStorage.getItem(STORAGE_KEY);
+						if (raw == null) return null;
+						return raw.split('\n');
+					} catch (_) { return null; }
+				}
+
+				// ---------------- Event handling ----------------
+
+				let composing = false;
+
+				function fullUpdate(savedOverride) {
+					const saved = savedOverride !== undefined ? savedOverride : saveCaret();
+					const lines = readLines();
+					render(lines);
+					restoreCaret(saved);
+					positionCounts();
+					saveStored(lines);
+				}
+
+				function handleEnter() {
+					const saved = saveCaret();
+					const lines = readLines();
+					const li = saved ? saved.lineIndex : Math.max(0, lines.length - 1);
+					const offset = saved ? saved.offset : (lines[li] || '').length;
+					const cur = lines[li] || '';
+					const before = cur.slice(0, offset);
+					const after = cur.slice(offset);
+					const newLines = lines.slice();
+					newLines.splice(li, 1, before, after);
+					render(newLines);
+					restoreCaret({ lineIndex: li + 1, offset: 0 });
+					positionCounts();
+					saveStored(newLines);
+				}
+
+				function handleBackspaceAtStart(saved) {
+					const lines = readLines();
+					const li = saved.lineIndex;
+					if (li <= 0) return;
+					const prev = lines[li - 1] || '';
+					const cur = lines[li] || '';
+					const newLines = lines.slice();
+					newLines.splice(li - 1, 2, prev + cur);
+					render(newLines);
+					restoreCaret({ lineIndex: li - 1, offset: prev.length });
+					positionCounts();
+					saveStored(newLines);
+				}
+
+				function handleDeleteAtEnd(saved) {
+					const lines = readLines();
+					const li = saved.lineIndex;
+					if (li >= lines.length - 1) return;
+					const cur = lines[li] || '';
+					const next = lines[li + 1] || '';
+					const newLines = lines.slice();
+					newLines.splice(li, 2, cur + next);
+					render(newLines);
+					restoreCaret({ lineIndex: li, offset: cur.length });
+					positionCounts();
+					saveStored(newLines);
+				}
+
+				function insertText(text) {
+					const saved = saveCaret();
+					const lines = readLines();
+					const li = saved ? saved.lineIndex : Math.max(0, lines.length - 1);
+					const offset = saved ? saved.offset : (lines[li] || '').length;
+					const cur = lines[li] || '';
+					const before = cur.slice(0, offset);
+					const after = cur.slice(offset);
+					const pieces = text.replace(/\r\n?/g, '\n').split('\n');
+					pieces[0] = before + pieces[0];
+					const tailIdx = pieces.length - 1;
+					const insertedTailLen = pieces[tailIdx].length;
+					pieces[tailIdx] = pieces[tailIdx] + after;
+					const newLines = lines.slice();
+					newLines.splice(li, 1, ...pieces);
+					render(newLines);
+					restoreCaret({
+						lineIndex: li + tailIdx,
+						offset: insertedTailLen,
+					});
+					positionCounts();
+					saveStored(newLines);
+				}
+
+				editor.addEventListener('keydown', (e) => {
+					if (composing) return;
+
+					if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+						e.preventDefault();
+						handleEnter();
+						return;
+					}
+
+					if (e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+						const sel = window.getSelection();
+						if (sel && sel.isCollapsed) {
+							const saved = saveCaret();
+							if (saved && saved.offset === 0 && saved.lineIndex > 0) {
+								e.preventDefault();
+								handleBackspaceAtStart(saved);
+								return;
+							}
+						}
+					}
+
+					if (e.key === 'Delete' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+						const sel = window.getSelection();
+						if (sel && sel.isCollapsed) {
+							const saved = saveCaret();
+							if (saved) {
+								const lines = readLines();
+								const cur = lines[saved.lineIndex] || '';
+								if (saved.offset === cur.length && saved.lineIndex < lines.length - 1) {
+									e.preventDefault();
+									handleDeleteAtEnd(saved);
+									return;
+								}
+							}
+						}
+					}
+				});
+
+				editor.addEventListener('paste', (e) => {
+					e.preventDefault();
+					const cd = e.clipboardData || window.clipboardData;
+					const text = cd ? cd.getData('text/plain') || cd.getData('text') || '' : '';
+					if (text) insertText(text);
+				});
+
+				editor.addEventListener('drop', (e) => {
+					// Avoid the browser inserting random HTML structure on drop
+					if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('text/plain')) {
+						e.preventDefault();
+						const text = e.dataTransfer.getData('text/plain');
+						if (text) insertText(text);
+					}
+				});
+
+				editor.addEventListener('compositionstart', () => { composing = true; });
+				editor.addEventListener('compositionend', () => {
+					composing = false;
+					fullUpdate();
+				});
+
+				editor.addEventListener('input', () => {
+					if (composing) return;
+					fullUpdate();
+				});
+
+				// Recompute count positions whenever the editor's layout changes (typing,
+				// window resize, font load, zoom, etc.).
+				if ('ResizeObserver' in window) {
+					const ro = new ResizeObserver(() => positionCounts());
+					ro.observe(editor);
+				}
+				window.addEventListener('resize', positionCounts);
+				// After fonts have loaded, character widths may change — recompute.
+				if (document.fonts && document.fonts.ready) {
+					document.fonts.ready.then(positionCounts).catch(() => { });
+				}
+
+				// ---------------- Init ----------------
+
+				function init() {
+					const stored = loadStored();
+					const initialLines = stored && stored.length > 0 ? stored : [''];
+					render(initialLines);
+
+					// Place caret at the end of the last line.
+					const lastLineIndex = initialLines.length - 1;
+					restoreCaret({ lineIndex: lastLineIndex, offset: initialLines[lastLineIndex].length });
+					positionCounts();
+				}
+
+				init();
+			})();
+		</script>
+	</body>
 </html>
