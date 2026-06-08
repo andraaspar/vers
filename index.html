@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>Hungarian Vowel Counter & Hexameter Scanner</title>
+		<title>Magyar magánhangzó-számláló és hexameter segéd</title>
 		<style>
 			* {
 				margin: 0;
@@ -121,28 +121,63 @@
 					padding: 0;
 				}
 
+				h1 {
+					font-size: 1.1rem;
+					margin-bottom: 1rem;
+				}
+
 				#backdrop,
 				textarea {
 					padding-left: 0;
-					padding-right: 48px;
+					padding-right: 40px;
+					font-size: 13px;
+				}
+
+				textarea {
+					line-height: 36.4px;
+				}
+
+				.slot {
+					height: 36.4px;
+					font-size: 13px;
+				}
+
+				.slot .sl-text {
+					line-height: 36.4px;
+				}
+
+				.slot .sl-scan {
+					font-size: 13px;
+					line-height: 13px;
 				}
 
 				#countcol {
-					right: 8px;
-					width: 32px;
+					right: 6px;
+					width: 28px;
+				}
+
+				#countcol .c-slot {
+					height: 36.4px;
+					line-height: 36.4px;
+					font-size: 12px;
+				}
+
+				.hint {
+					font-size: 0.75rem;
+					padding: 0 0.5rem;
 				}
 			}
 		</style>
 	</head>
 	<body>
 		<div class="container">
-			<h1>Hungarian Vowel Counter & Hexameter Scanner</h1>
+			<h1>Magyar magánhangzó-számláló és hexameter segéd</h1>
 			<div class="wrapper">
 				<div id="backdrop"></div>
 				<div id="countcol"></div>
-				<textarea id="input" spellcheck="false" placeholder="Type or paste text here…"></textarea>
+				<textarea id="input" spellcheck="false" placeholder="Írj vagy illessz be szöveget…"></textarea>
 			</div>
-			<p class="hint">Vowels: a á e é i í o ó ö ő u ú ü ű | – long, U short | [ ] lines skipped</p>
+			<p class="hint">Magánhangzók: a á e é i í o ó ö ő u ú ü ű | – hosszú, U rövid | [ ] sorok kihagyva</p>
 		</div>
 		<script>
 			(function () {
