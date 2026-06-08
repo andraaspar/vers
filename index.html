@@ -287,7 +287,16 @@
 					input.style.height = backdrop.offsetHeight + 'px';
 				}
 
-				input.addEventListener('input', update);
+				var STORAGE_KEY = 'vers.text';
+				try {
+					var saved = localStorage.getItem(STORAGE_KEY);
+					if (saved !== null) input.value = saved;
+				} catch (e) { }
+
+				input.addEventListener('input', function () {
+					update();
+					try { localStorage.setItem(STORAGE_KEY, input.value); } catch (e) { }
+				});
 				update();
 			})();
 		</script>
